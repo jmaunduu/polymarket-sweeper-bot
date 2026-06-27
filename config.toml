@@ -1,0 +1,60 @@
+[api]
+clob_host = "https://clob.polymarket.com"
+gamma_api = "https://gamma-api.polymarket.com"
+ws_url = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+chain_id = 137
+
+[feed]
+parallel_connections = 1
+stagger_ms = 7
+
+[strategy]
+sweep_trigger_prob = 0.97
+time_trigger_secs = 30.0
+assets = ["BTC", "ETH", "SOL", "XRP", "DOGE"]
+
+[data]
+duckdb_path = "./data/market_data.duckdb"
+
+[ntp]
+server = "pool.ntp.org"
+max_drift_ms = 500
+check_interval_mins = 30
+
+[cpu]
+websocket_core = -1
+signal_core = -1
+order_core = -1
+warn_if_disabled = true
+
+[hot_path]
+prebuild_lead_secs = 60
+prebuild_max_age_secs = 90
+
+[regime]
+weekday_enabled = true
+weekend_enabled = true
+allowed_utc_hours = []
+log_regime_stats_mins = 60
+
+[risk]
+max_daily_loss_usd = 50.0
+consecutive_loss_pause = 2
+pause_windows = 3
+min_fill_rate = 0.03
+max_ghost_fills_per_hour = 3
+max_session_drawdown_pct = 0.10
+
+[dry_run]
+enabled = false
+tolerance_pct = 3.0
+min_sample_windows = 50
+
+[telegram]
+bot_token = ""
+chat_id = ""
+alert_on_daily_cap = true
+alert_on_loss_pause = true
+alert_on_ghost_fill = true
+alert_on_daily_summary = true
+daily_summary_utc_hour = 23

@@ -1,0 +1,6 @@
+.env
+data/
+*.duckdb
+*.duckdb.wal
+*.log
+target/
