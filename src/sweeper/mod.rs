@@ -57,12 +57,9 @@ impl Sweeper {
         gamma_api: &str,
         assets: &[String],
     ) -> anyhow::Result<Vec<Market>> {
-        const TIMEFRAMES: [&str; 2] = ["5m", "15m"];
+        const TIMEFRAMES: [&str; 1] = ["5m"];
         let normalized_assets: Vec<String> = if assets.is_empty() {
-            ["btc", "eth", "sol"]
-                .into_iter()
-                .map(str::to_string)
-                .collect()
+            vec!["btc".to_string()]
         } else {
             assets
                 .iter()
@@ -127,6 +124,10 @@ impl Sweeper {
         price: f64,
         now: DateTime<Utc>,
     ) -> Option<Opportunity> {
+        if !context.outcome.eq_ignore_ascii_case("yes") {
+            return None;
+        }
+
         let seconds_remaining =
             (context.end_date - now).num_milliseconds() as f64 / 1_000.0;
 

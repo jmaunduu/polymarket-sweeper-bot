@@ -435,18 +435,17 @@ fn build_token_contexts(markets: &[Market]) -> (HashMap<String, TokenContext>, V
     let mut asset_ids = Vec::new();
 
     for market in markets {
-        for token in [&market.yes, &market.no] {
-            asset_ids.push(token.token_id.clone());
-            token_contexts.insert(
-                token.token_id.clone(),
-                TokenContext {
-                    market_id: market.market_id.clone(),
-                    question: market.question.clone(),
-                    end_date: market.end_date,
-                    outcome: token.outcome.clone(),
-                },
-            );
-        }
+        let token = &market.yes;
+        asset_ids.push(token.token_id.clone());
+        token_contexts.insert(
+            token.token_id.clone(),
+            TokenContext {
+                market_id: market.market_id.clone(),
+                question: market.question.clone(),
+                end_date: market.end_date,
+                outcome: token.outcome.clone(),
+            },
+        );
     }
 
     asset_ids.sort();
@@ -466,7 +465,7 @@ fn log_market_watch(message: &str, markets: &[Market], asset_ids: usize, config:
 
 fn print_opportunity(opportunity: &Opportunity) {
     println!(
-        "DRY RUN opportunity | market={} | outcome={} | price={:.4} | seconds_remaining={:.2} | token_id={} | question={}",
+        "DRY RUN opportunity | action=SELL YES | market={} | outcome={} | price={:.4} | seconds_remaining={:.2} | token_id={} | question={}",
         opportunity.market_id,
         opportunity.outcome,
         opportunity.price,

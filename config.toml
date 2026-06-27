@@ -10,8 +10,8 @@ stagger_ms = 7
 
 [strategy]
 sweep_trigger_prob = 0.97
-time_trigger_secs = 30.0
-assets = ["BTC", "ETH", "SOL", "XRP", "DOGE"]
+time_trigger_secs = 45.0
+assets = ["BTC"]
 
 [data]
 duckdb_path = "./data/market_data.duckdb"

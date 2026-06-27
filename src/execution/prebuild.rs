@@ -75,8 +75,9 @@ pub async fn build_order(
     signer: &crate::client::auth::OrderSigner,
 ) -> anyhow::Result<PrebuiltOrder> {
     let salt = uuid::Uuid::new_v4().to_string();
-    let maker_amount = (size_usd * 1_000_000.0) as u64;
-    let taker_amount = ((size_usd / price) * 1_000_000.0) as u64;
+    let contracts = size_usd / price;
+    let maker_amount = (contracts * 1_000_000.0) as u64;
+    let taker_amount = (size_usd * 1_000_000.0) as u64;
 
     let order = SignedOrder {
         salt: salt.clone(),
@@ -89,7 +90,7 @@ pub async fn build_order(
         expiration: "0".to_string(),
         nonce: "0".to_string(),
         fee_rate_bps: "0".to_string(),
-        side: 0,
+        side: 1,
         signature_type: 0,
         signature: signer.sign_order_struct(maker_addr, token_id, maker_amount, taker_amount)?,
     };
