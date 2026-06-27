@@ -27,7 +27,15 @@ hex = "0.4"
 dashmap = "6"
 uuid = { version = "1", features = ["v4"] }
 alloy-primitives = "0.8"
+parquet = "50.0"
+arrow = "50.0"
+arrow-array = "50.0"
+async-channel = "2.2"
 
 [[bin]]
 name = "dry_run"
 path = "bins/dry_run.rs"
+
+[[bin]]
+name = "backtest"
+path = "bins/backtest.rs"

@@ -12,6 +12,7 @@ mod sweeper;
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Context;
 use chrono::{Timelike, Utc};
@@ -26,6 +27,7 @@ use strategy::regime::{RegimeFilter, RegimeKey, RegimeTracker};
 use sweeper::{Market, Opportunity, Sweeper, TokenContext};
 use tokio::signal;
 use tokio::sync::mpsc;
+use tokio::time::MissedTickBehavior;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -86,22 +88,22 @@ async fn main() -> anyhow::Result<()> {
         .discover_markets(&config.api.gamma_api, &config.strategy.assets)
         .await
         .context("failed to discover configured crypto markets from Gamma")?;
-    let (token_contexts, asset_ids) = build_token_contexts(&markets);
-    info!(
-        markets = markets.len(),
-        asset_ids = asset_ids.len(),
-        configured_assets = ?config.strategy.assets,
-        parallel_connections = config.feed.parallel_connections,
-        "subscribing websocket feed"
+    let (mut token_contexts, asset_ids) = build_token_contexts(&markets);
+    let mut watched_asset_ids: HashSet<String> = asset_ids.iter().cloned().collect();
+    log_market_watch(
+        "subscribing websocket feed",
+        &markets,
+        asset_ids.len(),
+        &config,
     );
 
     let (tx, mut rx) = mpsc::unbounded_channel::<MarketEvent>();
-    let feed_handle = tokio::spawn(spawn_websocket_feed(
+    let mut feed_handle = tokio::spawn(spawn_websocket_feed(
         asset_ids,
         config.api.ws_url.clone(),
         config.feed.parallel_connections,
         config.feed.stagger_ms,
-        tx,
+        tx.clone(),
     ));
 
     let clob_client = Arc::new(ClobClient::new(format!(
@@ -170,9 +172,56 @@ async fn main() -> anyhow::Result<()> {
 
     let mut triggered_tokens = HashSet::new();
     let mut market_prices = HashMap::new();
+    let mut market_refresh = tokio::time::interval(Duration::from_secs(60));
+    market_refresh.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    market_refresh.tick().await;
 
     loop {
         tokio::select! {
+            _ = market_refresh.tick() => {
+                match sweeper
+                    .discover_markets(&config.api.gamma_api, &config.strategy.assets)
+                    .await
+                {
+                    Ok(markets) => {
+                        let (fresh_contexts, fresh_asset_ids) = build_token_contexts(&markets);
+                        let fresh_asset_set: HashSet<String> =
+                            fresh_asset_ids.iter().cloned().collect();
+
+                        token_contexts = fresh_contexts;
+                        triggered_tokens.retain(|token_id| fresh_asset_set.contains(token_id));
+                        market_prices.retain(|token_id, _| fresh_asset_set.contains(token_id));
+
+                        if fresh_asset_set != watched_asset_ids {
+                            feed_handle.abort();
+                            log_market_watch(
+                                "refreshing websocket feed with rediscovered markets",
+                                &markets,
+                                fresh_asset_ids.len(),
+                                &config,
+                            );
+                            feed_handle = tokio::spawn(spawn_websocket_feed(
+                                fresh_asset_ids,
+                                config.api.ws_url.clone(),
+                                config.feed.parallel_connections,
+                                config.feed.stagger_ms,
+                                tx.clone(),
+                            ));
+                        } else {
+                            info!(
+                                markets = markets.len(),
+                                asset_ids = fresh_asset_set.len(),
+                                "refreshed market metadata"
+                            );
+                        }
+
+                        watched_asset_ids = fresh_asset_set;
+                    }
+                    Err(err) => {
+                        warn!(error = %err, "failed to refresh crypto markets from Gamma");
+                    }
+                }
+            }
             maybe_event = rx.recv() => {
                 let Some(event) = maybe_event else {
                     warn!("websocket event channel closed");
@@ -181,11 +230,12 @@ async fn main() -> anyhow::Result<()> {
 
                 let tick = event.tick();
                 market_prices.insert(tick.asset_id.clone(), tick.price);
-                let context = token_contexts.get(&tick.asset_id);
+                let context = token_contexts.get(&tick.asset_id).cloned();
                 let market_id = context
+                    .as_ref()
                     .map(|ctx| ctx.market_id.clone())
                     .unwrap_or_else(|| tick.market_id.clone());
-                let outcome = context.map(|ctx| ctx.outcome.clone());
+                let outcome = context.as_ref().map(|ctx| ctx.outcome.clone());
 
                 if let Err(err) = recorder.record_tick(
                     tick.received_at.timestamp_millis() as f64 / 1_000.0,
@@ -215,7 +265,7 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
 
-                if let Some(ctx) = context {
+                if let Some(ctx) = context.as_ref() {
                     let now = Utc::now();
                     let secs_remaining = (ctx.end_date - now).num_milliseconds() as f64 / 1_000.0;
 
@@ -402,6 +452,16 @@ fn build_token_contexts(markets: &[Market]) -> (HashMap<String, TokenContext>, V
     asset_ids.sort();
     asset_ids.dedup();
     (token_contexts, asset_ids)
+}
+
+fn log_market_watch(message: &str, markets: &[Market], asset_ids: usize, config: &Config) {
+    info!(
+        markets = markets.len(),
+        asset_ids,
+        configured_assets = ?config.strategy.assets,
+        parallel_connections = config.feed.parallel_connections,
+        "{message}"
+    );
 }
 
 fn print_opportunity(opportunity: &Opportunity) {
